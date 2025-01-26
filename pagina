@@ -1,0 +1,119 @@
+<?php
+session_start();
+require 'db.php';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['login'])) {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+    
+    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        if (password_verify($password, $user['password'])) {
+            $_SESSION['user'] = $user;
+            header("Location: admin.php");
+            exit();
+        } else {
+            $error = "Contraseña incorrecta";
+        }
+    } else {
+        $error = "Usuario no encontrado";
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h2>Iniciar Sesión</h2>
+    <form method="post">
+        <input type="text" name="username" placeholder="Usuario" required>
+        <input type="password" name="password" placeholder="Contraseña" required>
+        <button type="submit" name="login">Ingresar</button>
+    </form>
+    <?php if (isset($error)) echo "<p>$error</p>"; ?>
+</body>
+</html>
+
+<?php
+if (!isset($_SESSION['user'])) {
+    header("Location: index.php");
+    exit();
+}
+
+$user = $_SESSION['user'];
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+    $type = $_POST['type'];
+    $id = $_POST['id'] ?? null;
+    $name = $_POST['name'] ?? null;
+    $location = $_POST['location'] ?? null;
+    
+    if ($action == 'add') {
+        $stmt = $conn->prepare("INSERT INTO $type (name, location) VALUES (?, ?)");
+        $stmt->bind_param("ss", $name, $location);
+        $stmt->execute();
+    } elseif ($action == 'update' && $id) {
+        $stmt = $conn->prepare("UPDATE $type SET name = ?, location = ? WHERE id = ?");
+        $stmt->bind_param("ssi", $name, $location, $id);
+        $stmt->execute();
+    } elseif ($action == 'delete' && $id) {
+        $stmt = $conn->prepare("DELETE FROM $type WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+    }
+}
+
+$destinos = $conn->query("SELECT * FROM destinos");
+$hoteles = $conn->query("SELECT * FROM hoteles");
+$guias = $conn->query("SELECT * FROM guias");
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h2>Bienvenido, <?php echo $user['username']; ?></h2>
+    <h3>Administrar Destinos, Hoteles y Guías</h3>
+    
+    <form method="post">
+        <input type="text" name="name" placeholder="Nombre" required>
+        <input type="text" name="location" placeholder="Ubicación" required>
+        <select name="type">
+            <option value="destinos">Destino</option>
+            <option value="hoteles">Hotel</option>
+            <option value="guias">Guía</option>
+        </select>
+        <button type="submit" name="action" value="add">Agregar</button>
+    </form>
+
+    <h3>Lista de Destinos</h3>
+    <ul>
+        <?php while ($row = $destinos->fetch_assoc()): ?>
+            <li><?php echo $row['name'] . ' - ' . $row['location']; ?>
+                <form method="post" style="display:inline;">
+                    <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
+                    <input type="hidden" name="type" value="destinos">
+                    <button type="submit" name="action" value="delete">Eliminar</button>
+                </form>
+            </li>
+        <?php endwhile; ?>
+    </ul>
+</body>
+</html>
